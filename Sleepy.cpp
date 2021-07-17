@@ -77,7 +77,7 @@ private:
 			switch (cmd.first) {
 			case SleepyResponse::InvalidCommand: sendMessage(message.channelID, "Invalid command input: " + cmd.second, mode); break;
 			case SleepyResponse::Hi: sendMessage(message.channelID, "Hi, " + message.author.username, mode); break;
-			case SleepyResponse::Ping: sendMessage(message.channelID, "Pong!", mode);
+			case SleepyResponse::Ping: sendMessage(message.channelID, "Pong!", mode); break;
 			case SleepyResponse::Help: {
 				sendMessage(message.channelID, "**Placeholder**", mode);
 			}; break;
