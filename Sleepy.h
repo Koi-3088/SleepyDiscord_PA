@@ -1,6 +1,8 @@
 #ifndef PokemonAutomation_SleepyPA_H
 #define PokemonAutomation_SleepyPA_H
 
+#include <stdint.h>
+
 #ifdef SLEEPY_STATIC
 #define SLEEPY_API
 #else
@@ -15,57 +17,41 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-	typedef void (*SleepyCallback)(int response);
-	SLEEPY_API void client_connect(SleepyCallback callback, char* token, char* prefix, char* channel, char* sudo, char* status);
+	typedef void (*SleepyCallback)(int response, uint64_t id, uint16_t button, uint16_t hold_ticks, uint8_t x, uint8_t y);
+	SLEEPY_API void client_connect(SleepyCallback callback, char* channels, char* sudo, char* params);
 	SLEEPY_API void client_disconnect();
-	SLEEPY_API void sendMsg(char* text);
-	SLEEPY_API void sendEmbed(char* embedStr, char* content);
+	SLEEPY_API void sendMsg(char* message);
+	SLEEPY_API void sendEmbed(char* json, char* message);
+	SLEEPY_API void sendFile(char* filePath, char* message, char* json = nullptr);
+			   void sleepy_commands();
 
-	enum SleepyResponse { // Should be brought in-line with PABotbase's definition values
+	enum SleepyResponse {
 		Disconnected = 0,
 		Connected = 1,
 		NotRunning = 2,
 		Running = 3,
 		CallbackSet = 4,
-		InvalidCommand = 5,
+		RequestReceived = 5,
+		InvalidCommand = 6,
 
-		ClickA = 6,
-		ClickB = 7,
-		ClickX = 8,
-		ClickY = 9,
-		ClickL = 10,
-		ClickR = 11,
-		ClickZL = 12,
-		ClickZR = 13,
-		ClickMinus = 14,
-		ClickPlus = 15,
-		ClickLStick = 16,
-		ClickRStick = 17,
-		ClickHome = 18,
-		ClickCapture = 19,
-		ClickDUp = 20,
-		ClickDDown = 21,
-		ClickDLeft = 22,
-		ClickDRight = 23,
+		Click = 7,
+		DPad = 8,
 
-		SetLStickUp = 24,
-		SetLStickDown = 25,
-		SetLStickLeft = 26,
-		SetLStickRight = 27,
-		SetRStickUp = 28,
-		SetRStickDown = 29,
-		SetRStickLeft = 30,
-		SetRStickRight = 31,
+		SetLStick = 9,
+		SetRStick = 10,
 
-		Start = 32,
-		Stop = 33,
-		Shutdown = 34,
+		ScreenshotJpg = 11,
+		ScreenshotPng = 12,
+		Start = 13,
+		Stop = 14,
+		Shutdown = 15,
+		ResetSerial = 16,
+		ChangeProgram = 17,
 
-		Hi = 35,
-		Ping = 36,
-		About = 37,
-		Help = 38,
+		Hi = 18,
+		Ping = 19,
+		About = 20,
+		Help = 21,
 	};
 
 #ifdef __cplusplus
