@@ -125,14 +125,14 @@ public:
 		if (m_callback == nullptr) {
 			m_callback = callback;
 			m_cmd = cmd_callback;
-			send_callback(SleepyResponse::CallbacksSet);
+			send_callback(SleepyResponse::CallbacksSet, "[SleepyDiscord]: Callbacks between the program and .dll have been set.");
 		}
 	}
 
 	// Send a status/event callback to the main program.
-	void send_callback(int response) {
+	void send_callback(int response, char* message) {
 		if (m_callback != nullptr) {
-			m_callback(response);
+			m_callback(response, message);
 		}
 	}
 
@@ -516,7 +516,7 @@ private:
 		if (!m_connected) {
 			initialize_commands();
 			m_connected = true;
-			send_callback(SleepyResponse::Connected);
+			send_callback(SleepyResponse::Connected, "[SleepyDiscord]: Connected successfully, client is ready.");
 
 			for (auto it : m_settings.echo_channels) {
 				sendMessage(it, "I'm alive!");
@@ -547,8 +547,13 @@ private:
 	void onQuit() override {
 		m_connected = false;
 		try {
-			send_callback(SleepyResponse::Disconnected);
+			send_callback(SleepyResponse::Disconnected, "[SleepyDiscord]: Event: \"onQuit();\" was called.");
 		} catch (...) {}
+	}
+
+	void onError(SleepyDiscord::ErrorCode code, std::string message) override {
+		std::string error_message = "[SleepyDiscord]: Internal API error: " + message + " (Error code: " + std::to_string(code) + ")";
+		send_callback(SleepyResponse::Fault, &error_message[0]);
 	}
 
 	void onHeartbeat() override {
@@ -557,7 +562,8 @@ private:
 		if (delta > 6 && m_connected) {
 			m_connected = false;
 			try {
-				send_callback(SleepyResponse::Disconnected);
+				send_callback(SleepyResponse::Disconnected, "[SleepyDiscord]: Event: Last heartbeat ack more than 6 minutes ago.");
+				quit();
 			} catch (...) {}
 		}
 	}
@@ -636,7 +642,7 @@ private:
 void client_connect(SleepyCallback callback, SleepyCommandCallback cmd_callback) {
 	if (m_client != nullptr) {
 		m_client->set_callbacks(callback, cmd_callback);
-		m_client->send_callback(SleepyResponse::SettingsInitialized);
+		m_client->send_callback(SleepyResponse::SettingsInitialized, "[SleepyDiscord]: Settings initialized on start.");
 		m_client->setIntents(SleepyDiscord::Intent::SERVER_MESSAGES, SleepyDiscord::Intent::SERVERS, SleepyDiscord::Intent::SERVER_MEMBERS, SleepyDiscord::Intent::SERVER_PRESENCES);
 		try {
 			m_client_thread = std::unique_ptr<std::thread>(new std::thread(client_run));
@@ -745,7 +751,7 @@ void apply_settings(char* w_channels, char* e_channels, char* l_channels, char* 
 	settings.suffix = suffix;
 
 	m_client->m_settings = settings;
-	m_client->send_callback(SleepyResponse::SettingsUpdated);
+	m_client->send_callback(SleepyResponse::SettingsUpdated, "[SleepyDiscord]: Settings reloaded.");
 }
 
 void sendLog(char* message) {

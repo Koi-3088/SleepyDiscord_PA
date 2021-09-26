@@ -23,7 +23,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-	typedef void (*SleepyCallback)(int response);
+	typedef void (*SleepyCallback)(int response, char* message);
 	typedef void (*SleepyCommandCallback)(int request, char* channel, uint64_t console_id, uint16_t button, uint16_t hold_ticks, uint8_t x, uint8_t y);
 	SLEEPY_API void client_connect(SleepyCallback callback, SleepyCommandCallback cmd_callback);
 	SLEEPY_API void client_disconnect();
