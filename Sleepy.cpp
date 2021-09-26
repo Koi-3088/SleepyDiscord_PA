@@ -530,16 +530,17 @@ private:
 		}
 
 		std::string id = server.ID.string();
-		if (m_settings.cache.empty()) {
-			m_settings.cache.try_emplace(id, server);
-			return;
-		}
-
+		bool updated = false;
 		for (auto it : m_settings.cache) {
 			if (it.first == id) {
 				m_settings.cache.at(id) = server;
+				updated = true;
 				break;
 			}
+		}
+		
+		if (!updated) {
+			m_settings.cache.try_emplace(id, server);
 		}
 	}
 
