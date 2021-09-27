@@ -31,7 +31,7 @@ extern "C" {
 	SLEEPY_API void program_response(int response, char* message = nullptr, char* channel = nullptr);
 	SLEEPY_API void sendLog(char* message);
 	SLEEPY_API void sendEmbed(char* message, char* json);
-	SLEEPY_API void sendFile(char* filePath, char* message, char* json = nullptr, char* channel = nullptr);
+	SLEEPY_API void sendFile(char* filePath, char* channel, char* message, char* json = nullptr);
 	void client_run();
 
 	enum SleepyResponse {

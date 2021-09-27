@@ -164,13 +164,13 @@ public:
 	}
 
 	// Sends a file to configured echo channels.
-	void send_file(char* filePath, char* message, char* json = nullptr, char* channel = nullptr) {
+	void send_file(char* filePath, char* channel, char* message, char* json = nullptr) {
 		SleepyDiscord::Embed embed;
 		if (json != nullptr) {
 			embed = SleepyDiscord::Embed(json);
 		}
 
-		if (channel != nullptr) {
+		if (!((std::string)channel).empty()) {
 			uploadFile(channel, filePath, message, embed);
 			return;
 		}
@@ -766,8 +766,8 @@ void sendEmbed(char* message, char* json) {
 	}
 }
 
-void sendFile(char* filePath, char* message, char* json, char* channel) {
+void sendFile(char* filePath, char* channel, char* message, char* json) {
 	if (m_client != nullptr) {
-		m_client->send_file(filePath, message, json, channel);
+		m_client->send_file(filePath, channel, message, json);
 	}
 }
