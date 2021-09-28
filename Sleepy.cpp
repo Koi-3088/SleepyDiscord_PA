@@ -192,6 +192,11 @@ private:
 		}
 	}
 
+	void error_response(SleepyDiscord::ErrorCode error) {
+		std::string error_message = "[SleepyDiscord]: Internal API error. Error code: " + std::to_string(error) + ". Make sure bot permissions and privileged intents are set up correctly for all channels your bot is active in.";
+		send_callback(SleepyResponse::Fault, &error_message[0]);
+	}
+
 	// Helps ensure a parameter supplied by a user is a valid number.
 	bool number_parse(const std::string input, SleepyDiscord::Snowflake<SleepyDiscord::Channel> channel, int& parse) {
 		try {
@@ -330,10 +335,15 @@ private:
 		});
 		CommandList::insert_command({
 			"hi", {}, false, false, [](SleepyClient& sleepy, SleepyDiscord::Message& message, std::queue<std::string>&, SleepyRequest request) {
-				std::string msg = "<@!" + message.author.ID + ">" + sleepy.m_settings.settings["hello"];
+				std::string msg;
+				bool ping = sleepy.m_settings.settings["hello"].substr(0, 3) == "<!>";
 				if (sleepy.m_settings.settings["hello"].empty()) {
-					msg += ", you're breathtaking!";
+					msg = "<@!" + message.author.ID + ">, you're breathtaking!";
 				}
+				else if (ping) {
+					msg = "<@!" + message.author.ID + ">" + sleepy.m_settings.settings["hello"].replace(0, 3, "");
+				}
+				else msg = sleepy.m_settings.settings["hello"];
 
 				sleepy.sendMessage(message.channelID, msg);
 				sleepy.send_command_callback(request);
@@ -514,13 +524,20 @@ private:
 	using SleepyDiscord::DiscordClient::DiscordClient;
 	void onReady(SleepyDiscord::Ready data) override {
 		if (!m_connected) {
+			for (auto it : m_settings.echo_channels) {
+				// Test "send message" permissions in specified channels, disconnect the bot if a message fails to send in any of the channels.
+				try {
+					auto mode = SleepyDiscord::RequestMode(SleepyDiscord::Sync);
+					sendMessage(it, "I'm alive!", mode);
+				}
+				catch (SleepyDiscord::ErrorCode error) {
+					error_response(error);
+					quit();
+				}
+			}
 			initialize_commands();
 			m_connected = true;
 			send_callback(SleepyResponse::Connected, "[SleepyDiscord]: Connected successfully, client is ready.");
-
-			for (auto it : m_settings.echo_channels) {
-				sendMessage(it, "I'm alive!");
-			}
 		}
 	}
 
@@ -551,11 +568,6 @@ private:
 		} catch (...) {}
 	}
 
-	void onError(SleepyDiscord::ErrorCode code, std::string message) override {
-		std::string error_message = "[SleepyDiscord]: Internal API error: " + message + " (Error code: " + std::to_string(code) + ")";
-		send_callback(SleepyResponse::Fault, &error_message[0]);
-	}
-
 	void onHeartbeat() override {
 		auto time = std::chrono::steady_clock::now();
 		auto delta = std::chrono::duration_cast<std::chrono::minutes>(time - m_last_ack).count();
@@ -563,7 +575,6 @@ private:
 			m_connected = false;
 			try {
 				send_callback(SleepyResponse::Disconnected, "[SleepyDiscord]: Event: Last heartbeat ack more than 6 minutes ago.");
-				quit();
 			} catch (...) {}
 		}
 	}
