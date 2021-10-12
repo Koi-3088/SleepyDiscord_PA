@@ -1,5 +1,4 @@
 #define SLEEPY_DEFAULT_REQUEST_MODE (SleepyDiscord::RequestMode)(SleepyDiscord::RequestMode::Async & ~(SleepyDiscord::RequestMode::ThrowError))
-#include <set>
 #include "Sleepy.h"
 #include "sleepy_discord/sleepy_discord.h"
 
@@ -30,18 +29,17 @@ enum DPad : uint8_t {
 std::unordered_map<std::string, SleepyRequest> request_map = {
     { "click",            SleepyRequest::Click },
     { "leftstick",        SleepyRequest::SetLStick },
-    { "rightstick",        SleepyRequest::SetRStick },
-    { "screenshot",        SleepyRequest::ScreenshotJpg },
+    { "rightstick",       SleepyRequest::SetRStick },
+    { "screenshot",       SleepyRequest::ScreenshotJpg },
     { "start",            SleepyRequest::Start },
-    { "stop",            SleepyRequest::Stop },
-    { "shutdown",        SleepyRequest::Shutdown },
-    { "hi",                SleepyRequest::Hi },
-    { "ping",            SleepyRequest::Ping },
+    { "stop",             SleepyRequest::Stop },
+    { "shutdown",         SleepyRequest::Shutdown },
+    { "hi",               SleepyRequest::Hi },
+    { "ping",             SleepyRequest::Ping },
     { "about",            SleepyRequest::About },
-    { "help",            SleepyRequest::Help },
-    { "botinfo",        SleepyRequest::BotInfo },
-    { "reloadsettings", SleepyRequest::ReloadSettings },
-    { "getprograms",    SleepyRequest::GetProgramIDs },
+    { "help",             SleepyRequest::Help },
+    { "botinfo",          SleepyRequest::GetConnectedBots },
+    { "reloadsettings",   SleepyRequest::ReloadSettings },
 };
 
 std::unordered_map<std::string, uint16_t> button_map = {
@@ -51,18 +49,18 @@ std::unordered_map<std::string, uint16_t> button_map = {
     { "y",         Buttons::Y },
     { "l",         Buttons::L },
     { "r",         Buttons::R },
-    { "zl",         Buttons::ZL },
-    { "zr",         Buttons::ZR },
+    { "zl",        Buttons::ZL },
+    { "zr",        Buttons::ZR },
     { "minus",     Buttons::Minus },
-    { "plus",     Buttons::Plus },
-    { "lstick",  Buttons::LStick },
-    { "rstick",  Buttons::RStick },
-    { "home",     Buttons::Home },
-    { "capture", Buttons::Capture },
+    { "plus",      Buttons::Plus },
+    { "lstick",    Buttons::LStick },
+    { "rstick",    Buttons::RStick },
+    { "home",      Buttons::Home },
+    { "capture",   Buttons::Capture },
 
     { "dup",     DPad::DUp },
-    { "ddown",     DPad::DDown },
-    { "dleft",     DPad::DLeft },
+    { "ddown",   DPad::DDown },
+    { "dleft",   DPad::DLeft },
     { "dright",  DPad::DRight },
 };
 
@@ -100,7 +98,7 @@ namespace CommandList {
 }
 
 // Struct to store settings from the main program.
-static struct SleepySettings {
+struct SleepySettings {
     bool suffix = false;
     std::unordered_map<std::string, SleepyDiscord::Server> cache;
     std::unordered_map<std::string, std::string> settings;
@@ -108,24 +106,21 @@ static struct SleepySettings {
     std::vector<std::string> echo_channels;
     std::vector<std::string> log_channels;
     std::vector<std::string> sudo;
-    std::string programs;
     std::string token;
-    std::string bots;
 };
 
 std::unique_ptr<SleepyClient> m_client;
 std::unique_ptr<std::thread> m_client_thread;
 class SleepyClient : public SleepyDiscord::DiscordClient {
 public:
-    bool m_connected;
     SleepySettings m_settings;
 
     // Set callback functions to be called in the main program.
     void set_callbacks(SleepyCallback callback, SleepyCommandCallback cmd_callback) {
-        if (m_callback == nullptr) {
+        if (m_callback == nullptr || m_cmd == nullptr) {
             m_callback = callback;
             m_cmd = cmd_callback;
-            send_callback(SleepyResponse::CallbacksSet, "[SleepyDiscord]: Callbacks between the program and .dll have been set.");
+            send_callback(SleepyResponse::CallbacksSet, "[SleepyDiscord]: Callbacks between the program and the wrapper have been set.");
         }
     }
 
@@ -136,16 +131,36 @@ public:
         }
     }
 
-    // Main program's response to various callbacks sent by the wrapper.
-    void program_response(int response, char* message = nullptr, char* channel = nullptr) {
-        if (channel != nullptr && message != nullptr) {
+    // Main program's responses and requests to various callbacks sent by the wrapper.
+    void program_response(int response, char* channel = nullptr, char* message = nullptr, char* filepath = nullptr) {
+        if (channel == nullptr) {
+            return;
+        }
+
+        SleepyDiscord::Embed embed;
+        embed.color = 14737632;
+        std::string path = filepath;
+
+        if (response == (int)SleepyRequest::GetConnectedBots) {
+            SleepyDiscord::EmbedField bots;
+            embed.title = "Currently Running Bots";
+            bots.isInline = false;
+            bots.name = "Bot Information";
+
+            bots.value = message;
+            embed.fields.push_back(bots);
+            sendMessage(channel, "", embed);
+            return;
+        }
+        else if (!path.empty()) {
+            SleepyDiscord::Embed embed;
+            embed.image.url = "attachment://" + path;
+            embed.footer.text = message;
+            uploadFile(channel, path, "", embed);
+            return;
+        }
+        else if (message != nullptr) {
             sendMessage(channel, message);
-        }
-        else if (response == (int)SleepyRequest::GetConnectedBots && message != nullptr) {
-            m_settings.bots = message;
-        }
-        else if (response == (int)SleepyRequest::GetProgramIDs && message != nullptr) {
-            m_settings.programs = message;
         }
     }
 
@@ -177,35 +192,6 @@ public:
 
         for (auto it : m_settings.echo_channels) {
             uploadFile(it, filePath, message, embed);
-        }
-    }
-
-private:
-    SleepyCallback m_callback = nullptr;
-    SleepyCommandCallback m_cmd = nullptr;
-    std::chrono::steady_clock::time_point m_last_ack = std::chrono::steady_clock::now();
-
-    // Send a Discord command-specific callback to the main program.
-    void send_command_callback(int request, char* channel = nullptr, uint64_t console_id = 0, uint16_t button = 0, uint16_t hold_ticks = 0, uint8_t x = 0, uint8_t y = 0) {
-        if (m_cmd != nullptr) {
-            m_cmd(request, channel, console_id, button, hold_ticks, x, y);
-        }
-    }
-
-    void error_response(SleepyDiscord::ErrorCode error) {
-        std::string error_message = "[SleepyDiscord]: Internal API error. Error code: " + std::to_string(error) + ". Make sure bot permissions and privileged intents are set up correctly for all channels your bot is active in.";
-        send_callback(SleepyResponse::Fault, &error_message[0]);
-    }
-
-    // Helps ensure a parameter supplied by a user is a valid number.
-    bool number_parse(const std::string input, SleepyDiscord::Snowflake<SleepyDiscord::Channel> channel, int& parse) {
-        try {
-            parse = std::stoi(input);
-            return true;
-        }
-        catch (...) {
-            sendMessage(channel, "Invalid command input: \"" + input + "\" is not valid for this parameter.");
-            return false;
         }
     }
 
@@ -297,6 +283,7 @@ private:
                     return;
                 }
                 params.pop();
+
                 if (params.front() == "png") {
                     request = SleepyRequest::ScreenshotPng;
                 }
@@ -465,29 +452,8 @@ private:
             });
         CommandList::insert_command({
             "botinfo", {}, false, false, [](SleepyClient& sleepy, SleepyDiscord::Message& message, std::queue<std::string>&, SleepyRequest request) {
-                SleepyDiscord::Embed embed;
-                SleepyDiscord::EmbedField bots;
-                embed.title = "Currently Running Bots";
-                embed.color = 14737632;
-                bots.isInline = false;
-                bots.name = "Bot Information";
-
-                sleepy.send_command_callback(SleepyRequest::GetConnectedBots);
-                int timer = 1000;
-                while (sleepy.m_settings.bots.empty()) {
-                    Sleep(50);
-                    timer -= 50;
-                    if (timer <= 0) {
-                        sleepy.sendMessage(message.channelID, "Failed to retrieve bot info.");
-                        return;
-                    }
-                }
-
-                bots.value = sleepy.m_settings.bots;
-                embed.fields.push_back(bots);
-                sleepy.m_settings.bots.clear();
-                sleepy.sendMessage(message.channelID, "", embed);
-                sleepy.send_command_callback(request);
+                std::string channel = message.channelID.string();
+                sleepy.send_command_callback(SleepyRequest::GetConnectedBots, &channel[0]);
             }
             });
         CommandList::insert_command({
@@ -496,28 +462,37 @@ private:
                 sleepy.send_command_callback(SleepyRequest::ReloadSettings, &channel[0]);
             }
             });
-        CommandList::insert_command({
-            "getprograms", {}, false, false, [](SleepyClient& sleepy, SleepyDiscord::Message& message, std::queue<std::string>&, SleepyRequest request) {
-                SleepyDiscord::Embed embed;
-                embed.title = "Currently Running Programs";
-                embed.color = 14737632;
-                sleepy.send_command_callback(request);
+    }
 
-                int timer = 1000;
-                while (sleepy.m_settings.programs.empty()) {
-                    Sleep(50);
-                    timer -= 50;
-                    if (timer <= 0) {
-                        sleepy.sendMessage(message.channelID, "Failed to retrieve program info.");
-                        return;
-                    }
-                }
+private:
+    bool m_connected;
+    bool m_connecting;
+    std::chrono::steady_clock::time_point m_last_ack = std::chrono::steady_clock::now();
+    SleepyCallback m_callback = nullptr;
+    SleepyCommandCallback m_cmd = nullptr;
 
-                embed.description = sleepy.m_settings.programs;
-                sleepy.m_settings.programs.clear();
-                sleepy.sendMessage(message.channelID, "", embed);
-            }
-            });
+    // Send a Discord command-specific callback to the main program.
+    void send_command_callback(int request, char* channel = nullptr, uint64_t console_id = 0, uint16_t button = 0, uint16_t hold_ticks = 0, uint8_t x = 0, uint8_t y = 0) {
+        if (m_cmd != nullptr) {
+            m_cmd(request, channel, console_id, button, hold_ticks, x, y);
+        }
+    }
+
+    // Sends errors from the API to the main program for internal logging.
+    void error_response(std::string msg) {
+        send_callback(SleepyResponse::API, &msg[0]);
+    }
+
+    // Helps ensure a parameter supplied by a user is a valid number.
+    bool number_parse(const std::string input, SleepyDiscord::Snowflake<SleepyDiscord::Channel> channel, int& parse) {
+        try {
+            parse = std::stoi(input);
+            return true;
+        }
+        catch (...) {
+            sendMessage(channel, "Invalid command input: \"" + input + "\" is not valid for this parameter.");
+            return false;
+        }
     }
 
     // Subscribe to various Discord events. Helps with rate limits and allows us to react accordingly.
@@ -531,45 +506,37 @@ private:
                     sendMessage(it, "I'm alive!", mode);
                 }
                 catch (SleepyDiscord::ErrorCode error) {
-                    error_response(error);
+                    std::string msg = "[SleepyDiscord]: Error code: " + std::to_string(error) + ".\nMake sure bot permissions and privileged intents are set up correctly for all channels your bot is active in.";
+                    error_response(msg);
                 }
             }
 
-            initialize_commands();
-            if (CommandList::command_map.empty()) {
-                std::string error_msg = "[SleepyDiscord]: Unknown error: Failed to initialize Discord commands.";
-                send_callback(SleepyResponse::Fault, &error_msg[0]);
-            }
-
             m_connected = true;
+            m_connecting = false;
+            updateStatus(m_settings.settings["status"], m_last_ack.time_since_epoch().count(), SleepyDiscord::online);
             send_callback(SleepyResponse::Connected, "[SleepyDiscord]: Connected successfully, client is ready.");
         }
     }
 
     void onServer(SleepyDiscord::Server server) override {
-        if (server.empty()) {
-            return;
-        }
-
-        std::string id = server.ID.string();
-        bool updated = false;
-        for (auto it : m_settings.cache) {
-            if (it.first == id) {
-                m_settings.cache.at(id) = server;
-                updated = true;
-                break;
-            }
-        }
-
-        if (!updated) {
-            m_settings.cache.try_emplace(id, server);
-        }
-    }
-
-    void onQuit() override {
-        m_connected = false;
         try {
-            send_callback(SleepyResponse::Disconnected, "[SleepyDiscord]: Event: \"onQuit();\" was called.");
+            if (server.empty()) {
+                return;
+            }
+
+            std::string id = server.ID.string();
+            bool updated = false;
+            for (auto it : m_settings.cache) {
+                if (it.first == id) {
+                    m_settings.cache.at(id) = server;
+                    updated = true;
+                    break;
+                }
+            }
+
+            if (!updated) {
+                m_settings.cache.try_emplace(id, server);
+            }
         } catch (...) {}
     }
 
@@ -578,9 +545,7 @@ private:
         auto delta = std::chrono::duration_cast<std::chrono::minutes>(time - m_last_ack).count();
         if (delta > 6 && m_connected) {
             m_connected = false;
-            try {
-                send_callback(SleepyResponse::Disconnected, "[SleepyDiscord]: Event: Last heartbeat ack more than 6 minutes ago.");
-            } catch (...) {}
+            send_callback(SleepyResponse::Disconnected, "[SleepyDiscord]: Event: Last heartbeat ack more than 6 minutes ago.");
         }
     }
 
@@ -591,6 +556,11 @@ private:
             updateStatus(m_settings.settings["status"], m_last_ack.time_since_epoch().count(), SleepyDiscord::idle);
             m_last_ack = time;
         }
+    }
+
+    void onError(SleepyDiscord::ErrorCode code, const std::string msg) override {
+        std::string error_message = "[SleepyDiscord]: Error code: " + std::to_string(code) + ".\n" + msg;
+        error_response(error_message);
     }
 
     void onMessage(SleepyDiscord::Message message) override {
@@ -655,11 +625,8 @@ private:
 };
 
 // Finalize initialization before running the client in a new thread in order to not block the main one.
-void client_connect(SleepyCallback callback, SleepyCommandCallback cmd_callback) {
+void client_connect() {
     if (m_client != nullptr) {
-        m_client->set_callbacks(callback, cmd_callback);
-        m_client->send_callback(SleepyResponse::SettingsInitialized, "[SleepyDiscord]: Settings initialized on start.");
-        m_client->setIntents(SleepyDiscord::Intent::SERVER_MESSAGES, SleepyDiscord::Intent::SERVERS, SleepyDiscord::Intent::SERVER_MEMBERS, SleepyDiscord::Intent::SERVER_PRESENCES);
         try {
             m_client_thread = std::unique_ptr<std::thread>(new std::thread(client_run));
         } catch (...) {}
@@ -669,6 +636,7 @@ void client_connect(SleepyCallback callback, SleepyCommandCallback cmd_callback)
 // Main run thread.
 void client_run() {
     try {
+        m_client->setIntents(SleepyDiscord::Intent::SERVER_MESSAGES, SleepyDiscord::Intent::SERVERS, SleepyDiscord::Intent::SERVER_MEMBERS, SleepyDiscord::Intent::SERVER_PRESENCES);
         m_client->run();
     } catch (...) {}
 }
@@ -686,7 +654,8 @@ void client_disconnect() {
     } catch (...) {}
 }
 
-void program_response(int response, char* message, char* channel) {
+// Responses and requests from the main program.
+void program_response(int response, char* channel, char* message, char* filepath) {
     if (m_client != nullptr) {
         if (response == SleepyRequest::Terminate) {
             try {
@@ -697,12 +666,12 @@ void program_response(int response, char* message, char* channel) {
                 return;
             }
         }
-        m_client->program_response(response, message, channel);
+        m_client->program_response(response, channel, message, filepath);
     }
 }
 
-// Parse and apply user settings from the main program.
-void apply_settings(char* w_channels, char* e_channels, char* l_channels, char* sudo, char* params, bool suffix) {
+// Parse and apply user settings from the main program, do initial client setup.
+void apply_settings(SleepyCallback callback, SleepyCommandCallback cmd_callback, char* w_channels, char* e_channels, char* l_channels, char* sudo, char* params, bool suffix) {
     SleepySettings settings;
     std::string whitelist = w_channels;
     std::string echo = e_channels;
@@ -716,10 +685,6 @@ void apply_settings(char* w_channels, char* e_channels, char* l_channels, char* 
     std::queue<std::string> q_settings = CommandList::split_input(s_params, '|');
     settings.token = q_settings.front();
     q_settings.pop();
-
-    if (m_client == nullptr) {
-        m_client = std::unique_ptr<SleepyClient>(new SleepyClient(settings.token, 1));
-    }
 
     while (!qw_channels.empty()) {
         settings.whitelist_channels.push_back(qw_channels.front());
@@ -765,8 +730,24 @@ void apply_settings(char* w_channels, char* e_channels, char* l_channels, char* 
     settings.settings.emplace("github", q_settings.front());
     settings.suffix = suffix;
 
+    if (m_client == nullptr) {
+        m_client = std::unique_ptr<SleepyClient>(new SleepyClient(settings.token, 1));
+        m_client->set_callbacks(callback, cmd_callback);
+        m_client->send_callback(SleepyResponse::SettingsInitialized, "[SleepyDiscord]: Settings initialized.");
+    }
+    else m_client->send_callback(SleepyResponse::SettingsUpdated, "[SleepyDiscord]: Settings reloaded.");
     m_client->m_settings = settings;
-    m_client->send_callback(SleepyResponse::SettingsUpdated, "[SleepyDiscord]: Settings reloaded.");
+
+    bool initialized = CommandList::command_map.size() > 0;
+    if (!initialized) {
+        m_client->initialize_commands();
+    }
+
+    if (CommandList::command_map.size() == 0) {
+        std::string error_msg = "[SleepyDiscord]: Unknown error: Failed to initialize Discord commands.";
+        m_client->send_callback(SleepyResponse::Fault, &error_msg[0]);
+    }
+    else m_client->send_callback(SleepyResponse::CommandsInitialized, "[SleepyDiscord]: Discord commands initialized.");
 }
 
 void sendLog(char* message) {
